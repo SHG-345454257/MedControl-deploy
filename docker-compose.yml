@@ -1,0 +1,64 @@
+name: medcontrol-deploy
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://medcontrol:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}@db:5432/medcontrol?schema=public
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: medcontrol
+      POSTGRES_USER: medcontrol
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medcontrol -d medcontrol"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  migrate:
+    build:
+      context: ${PROJECT_DIR:-../MedControl}/backend
+      dockerfile: Dockerfile.prod
+      target: migration
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ${PROJECT_DIR:-../MedControl}/backend
+      dockerfile: Dockerfile.prod
+    environment:
+      <<: *backend-env
+      PORT: 3000
+      CLIENT_URL: https://medcontrol.localhost
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ${PROJECT_DIR:-../MedControl}/frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: /api
+
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres_data:
