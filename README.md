@@ -1,115 +1,113 @@
 # MedControl-deploy
 
-Этот репозиторий содержит конфигурацию для локального запуска MedControl по HTTPS. Docker Compose собирает приложение из соседней папки с исходным кодом, запускает PostgreSQL, применяет миграции Prisma и поднимает nginx. После запуска приложение доступно на [https://medcontrol.localhost](https://medcontrol.localhost).
+Конфигурация для запуска MedControl на Windows через Docker Compose. Фронтенд, бэкенд и nginx запускаются локально. В основном режиме Prisma подключается к PostgreSQL в Supabase. Сайт доступен по адресу [https://medcontrol.localhost](https://medcontrol.localhost) на компьютере, где запущен Docker.
 
 ## 1. Установите инструменты
 
-Инструкция рассчитана на Windows и PowerShell.
-
-- Установите и откройте [Docker Desktop для Windows](https://docs.docker.com/desktop/setup/install/windows-install/). Дождитесь запуска Docker Engine.
+- Установите и запустите [Docker Desktop для Windows](https://docs.docker.com/desktop/setup/install/windows-install/).
 - Установите [Git для Windows](https://git-scm.com/install/windows), если будете скачивать репозитории через `git clone`.
-- Установите [mkcert](https://github.com/FiloSottile/mkcert) для выпуска локального сертификата.
-
-Если на компьютере доступен `winget`, mkcert можно установить из PowerShell:
+- Установите [mkcert](https://github.com/FiloSottile/mkcert) для локального HTTPS. Если доступен `winget`, выполните команду ниже и откройте новое окно PowerShell.
 
 ```powershell
 winget install --id FiloSottile.mkcert --exact
 ```
 
-Откройте новое окно PowerShell и проверьте установку:
+Проверьте, что Docker запущен и команды доступны:
 
 ```powershell
 docker info
 docker compose version
 mkcert -version
-git --version
 ```
 
-Node.js, npm и PostgreSQL устанавливать на Windows не нужно. Они используются внутри Docker.
+Для этого способа запуска отдельно устанавливать Node.js, npm или PostgreSQL на Windows не нужно.
 
 ## 2. Скачайте оба репозитория
 
-Откройте PowerShell в общей папке, где будут храниться оба репозитория. Скопируйте HTTPS-адреса на GitHub через **Code → HTTPS** и вставьте их при запросе:
+На GitHub откройте **Code → HTTPS** в каждом репозитории. В PowerShell из общей папки выполните команды и вставьте адреса при запросе:
 
 ```powershell
-$appRepo = Read-Host 'Вставьте HTTPS-адрес основного репозитория MedControl'
+$appRepo = Read-Host 'HTTPS-адрес репозитория MedControl'
 git clone $appRepo MedControl
 
-$deployRepo = Read-Host 'Вставьте HTTPS-адрес этого репозитория MedControl-deploy'
+$deployRepo = Read-Host 'HTTPS-адрес репозитория MedControl-deploy'
 git clone $deployRepo MedControl-deploy
 
 Set-Location .\MedControl-deploy
 ```
 
-Если этот репозиторий уже скачан, клонируйте только основной репозиторий в соседнюю папку `MedControl`. При скачивании через **Code → Download ZIP** распакуйте оба архива и переименуйте распакованные папки в `MedControl` и `MedControl-deploy`.
+Если скачиваете архивы через **Download ZIP**, распакуйте их в соседние папки `MedControl` и `MedControl-deploy`. В папке деплоя должны находиться `docker-compose.yml`, `compose.supabase.yml`, `init-local.ps1` и `nginx.conf`. В исходниках приложения нужны `backend/Dockerfile.prod` и `frontend/Dockerfile.prod`.
 
-Проверьте, что файлы лежат на этих уровнях:
+## 3. Подготовьте локальное окружение
 
-```text
-Общая папка/
-├── MedControl/
-│   ├── backend/Dockerfile.prod
-│   └── frontend/Dockerfile.prod
-└── MedControl-deploy/
-    ├── .env.example
-    ├── docker-compose.yml
-    ├── init-local.ps1
-    └── nginx.conf
-```
-
-Используйте версию основного проекта, в которой уже есть оба `Dockerfile.prod` и поддержка настройки `VITE_API_URL=/api` во фронтенде. Путь по умолчанию — `PROJECT_DIR=../MedControl`. Если папка с исходниками называется иначе, исправьте `PROJECT_DIR` в локальном `.env` после следующего шага и перед сборкой. Путь задаётся относительно папки `MedControl-deploy`.
-
-## 3. Подготовьте окружение и запустите приложение
-
-Из папки **`MedControl-deploy`** выполните:
+Откройте терминал в **`MedControl-deploy`**. При первой настройке выполните:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\init-local.ps1
 ```
 
-Скрипт создаёт `.env` из `.env.example`, если файла ещё нет, генерирует пароль PostgreSQL и секрет JWT, а затем устанавливает локальный центр сертификации mkcert и создаёт сертификат для `medcontrol.localhost`. Если Windows запросит подтверждение установки сертификата mkcert, подтвердите его. Если скрипт вывел ошибку, устраните её перед запуском Compose.
+Скрипт создаёт `.env` из `.env.example`, если файла ещё нет, и выпускает сертификат для `medcontrol.localhost`. Если Windows предложит доверять локальному центру сертификации mkcert, подтвердите установку. Оставьте рабочий `.env` и ключи из `certs/` на компьютере.
+
+В `.env` проверьте `PROJECT_DIR=../MedControl`. Если папка исходников называется иначе, укажите её путь относительно `MedControl-deploy`. Оставьте сгенерированные `JWT_SECRET` и `POSTGRES_PASSWORD`. Если у вас уже настроена отправка писем, сохраните существующие настройки SMTP.
+
+## 4. Подключите Supabase
+
+1. Откройте существующий проект MedControl в Supabase. Для новой установки создайте проект и сохраните его **Database Password**. В **Integrations → Data API** оставьте **Enable Data API** выключенным. Бэкенд подключается к базе напрямую через Prisma. [Настройки Data API](https://supabase.com/docs/guides/api/securing-your-api#disable-the-data-api)
+2. В проекте нажмите **Connect → Direct → Session pooler**. Скопируйте строку подключения с портом **5432**. [Способы подключения к PostgreSQL](https://supabase.com/docs/guides/database/connecting-to-postgres)
+3. В `MedControl-deploy/.env` добавьте строку ниже, подставив свою строку подключения и пароль базы. Если пароль содержит специальные символы, закодируйте только пароль для URL. Если у строки уже есть другие параметры, добавьте `sslmode=require` через `&`. [Формат URL подключения Prisma](https://www.prisma.io/docs/orm/v6/overview/databases/postgresql)
+
+```dotenv
+SUPABASE_DATABASE_URL='postgresql://postgres.PROJECT_REF:DATABASE_PASSWORD@POOLER_HOST:5432/postgres?sslmode=require'
+```
+
+## 5. Запустите и проверьте приложение
+
+Из папки `MedControl-deploy` выполните:
+
+```powershell
+docker compose -f docker-compose.yml -f compose.supabase.yml config -q
+docker compose -f docker-compose.yml -f compose.supabase.yml up --build -d
+docker compose -f docker-compose.yml -f compose.supabase.yml ps --all
+```
+
+`config -q` проверяет конфигурацию. Сервис `migrate` применяет ожидающие миграции Prisma к Supabase. Бэкенд запускается после успешного завершения миграций.
+
+1. Убедитесь, что `backend`, `frontend` и `nginx` запущены, а `migrate` завершился со статусом `Exited (0)`.
+2. Откройте [проверку подключения к базе](https://medcontrol.localhost/api/health/db). Ожидаемый ответ — `{"status":"ok","database":"connected"}`.
+3. Откройте [MedControl](https://medcontrol.localhost). Если вы подключили базу с перенесёнными данными, войдите в существующую учётную запись. Если база создана с нуля, зарегистрируйте тестовую учётную запись. Миграции создают таблицы, а перенос записей из локальной базы выполняется отдельно.
+
+## Ежедневные команды для Supabase
+
+Выполняйте команды из папки `MedControl-deploy`. Повторно запускать `init-local.ps1` при обычном старте не требуется.
+
+| Действие | Команда |
+|---|---|
+| Запустить приложение | `docker compose -f docker-compose.yml -f compose.supabase.yml up -d` |
+| Пересобрать после изменений в коде | `docker compose -f docker-compose.yml -f compose.supabase.yml up --build -d` |
+| Проверить состояние | `docker compose -f docker-compose.yml -f compose.supabase.yml ps --all` |
+| Посмотреть логи | `docker compose -f docker-compose.yml -f compose.supabase.yml logs --tail=100 migrate backend frontend nginx` |
+| Остановить приложение | `docker compose -f docker-compose.yml -f compose.supabase.yml down` |
+
+После остановки приложения данные остаются в Supabase.
+
+## Запуск с локальной базой PostgreSQL
+
+Для этого режима используйте только базовый файл `docker-compose.yml`. Если приложение сейчас запущено с Supabase, сначала остановите его командой `down` из таблицы выше.
 
 ```powershell
 docker compose up --build -d
 docker compose ps --all
 ```
 
-Первая сборка скачивает базовые образы и зависимости, поэтому может занять несколько минут. Оставьте `.env` и созданные сертификаты и ключи из `certs/` у себя на компьютере.
-
-## 4. Проверьте запуск
-
-1. В выводе `docker compose ps --all` сервисы `nginx`, `frontend` и `backend` должны быть запущены, а `db` — иметь статус `healthy`. Для одноразового сервиса `migrate` ожидается `Exited (0)`.
-2. Откройте [проверку API и базы](https://medcontrol.localhost/api/health/db). При успешном подключении API возвращает JSON со статусом `ok` и значением `database: connected`.
-3. Откройте [MedControl](https://medcontrol.localhost), зарегистрируйте тестовую учётную запись и войдите. При первом запуске используется новая локальная база, поэтому учётные записи с другого компьютера в ней отсутствуют.
-
-## Повторный запуск, обновление и остановка
-
-Выполняйте команды из папки `MedControl-deploy`.
-
-| Действие | Команда |
-|---|---|
-| Запустить уже собранное приложение | `docker compose up -d` |
-| Пересобрать после обновления исходников | `docker compose up --build -d` |
-| Посмотреть состояние сервисов | `docker compose ps --all` |
-| Посмотреть последние сообщения сервисов | `docker compose logs --tail=100 db migrate backend frontend nginx` |
-| Остановить приложение с сохранением базы | `docker compose down` |
-
-Если репозитории клонированы через Git, обновить их и пересобрать приложение можно так:
-
-```powershell
-git -C ..\MedControl pull
-git pull
-docker compose up --build -d
-```
+В локальном режиме запускается контейнер `db`, а данные хранятся в томе `postgres_data`. Данные локального PostgreSQL и Supabase ведутся раздельно. Если вы уже перешли на Supabase и старый контейнер базы ещё работает, его можно остановить командой `docker compose stop db`. Данные в локальном томе сохранятся.
 
 ## Если приложение не запускается
 
 | Симптом | Что проверить |
 |---|---|
-| Docker сообщает, что не может подключиться к демону | Откройте Docker Desktop, дождитесь запуска движка и повторите `docker info`. |
-| Compose не находит `Dockerfile.prod` или папку сборки | Сверьте расположение обеих папок, значение `PROJECT_DIR` и наличие `Dockerfile.prod` в основном проекте. |
-| Compose сообщает, что порты 80 или 443 заняты | Остановите другой локальный веб-сервер или контейнер, использующий эти порты, затем повторите запуск. |
-| Браузер не доверяет сертификату | Повторите запуск `init-local.ps1`, подтвердите установку локального сертификата mkcert и перезапустите браузер. |
-| Сборка сообщает об ошибке DNS при скачивании образов | Проверьте подключение к интернету и повторите `docker compose up --build -d`. |
-| Страница открывается, а запросы к API идут на `localhost:3001` | Обновите основной репозиторий до версии с поддержкой `VITE_API_URL` и пересоберите фронтенд через `docker compose up --build -d`. |
-| API возвращает `502` или сервис `migrate` завершился с ошибкой | Посмотрите `docker compose logs --tail=100 db migrate backend nginx`. Бэкенд запускается после успешного применения миграций. |
+| Docker недоступен | Откройте Docker Desktop и повторите `docker info`. |
+| Compose не находит `Dockerfile.prod` | Проверьте расположение обеих папок и значение `PROJECT_DIR`. |
+| Prisma не подключается к Supabase | Проверьте строку из **Session pooler**, порт 5432, пароль базы и кодирование спецсимволов. Посмотрите логи `migrate` и `backend` командой из таблицы. |
+| Браузер показывает `ERR_CONNECTION_REFUSED` | Проверьте статус `nginx` и наличие порта 443 в выводе `ps --all`. Запустите nginx командой `docker compose -f docker-compose.yml -f compose.supabase.yml up -d nginx`. |
+| Браузер не доверяет сертификату | Повторите `init-local.ps1` и подтвердите установку сертификата mkcert. |
+| После пересборки приложение показывает `502` | Убедитесь, что `backend` и `frontend` запущены. Затем перезапустите nginx командой `docker compose -f docker-compose.yml -f compose.supabase.yml restart nginx`. |
