@@ -37,6 +37,11 @@ services:
       PORT: 3000
       CLIENT_URL: https://medcontrol.localhost
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env}
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-465}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
     depends_on:
       migrate:
         condition: service_completed_successfully
