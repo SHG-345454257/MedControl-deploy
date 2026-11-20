@@ -1,0 +1,13 @@
+# Load alongside docker-compose.yml to use the hosted PostgreSQL database.
+services:
+  db:
+    profiles: [local-db]
+
+  migrate:
+    depends_on: !reset {}
+    environment:
+      DATABASE_URL: ${SUPABASE_DATABASE_URL:?Set SUPABASE_DATABASE_URL in .env}
+
+  backend:
+    environment:
+      DATABASE_URL: ${SUPABASE_DATABASE_URL:?Set SUPABASE_DATABASE_URL in .env}
